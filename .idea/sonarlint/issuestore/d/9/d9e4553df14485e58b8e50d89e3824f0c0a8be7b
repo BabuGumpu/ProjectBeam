@@ -1,0 +1,9 @@
+
+g	java:S116"RRename this field "InstrID" to match the regular expression '^[a-z][a-zA-Z0-9]*$'.(›Î®£
+q	java:S116"WRename this field "RatingAgency" to match the regular expression '^[a-z][a-zA-Z0-9]*$'.(•üñ‚ýÿÿÿÿ
+k	java:S116"VRename this field "RatingGroup" to match the regular expression '^[a-z][a-zA-Z0-9]*$'.(Óüß©
+d	java:S116"ORename this field "Code" to match the regular expression '^[a-z][a-zA-Z0-9]*$'.(üÓÄ€
+i	java:S116"TRename this field "ValidFrom" to match the regular expression '^[a-z][a-zA-Z0-9]*$'.(Œˆ®¤
+l	java:S116"RRename this field "ValidTo" to match the regular expression '^[a-z][a-zA-Z0-9]*$'.(Ý÷™‡üÿÿÿÿ
+q	java:S116"WRename this field "RatingStatus" to match the regular expression '^[a-z][a-zA-Z0-9]*$'.(×Ü„Žýÿÿÿÿ
+v	java:S116"\Rename this field "RatingPurposeType" to match the regular expression '^[a-z][a-zA-Z0-9]*$'.(Ýæ¾äÿÿÿÿÿ

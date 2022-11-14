@@ -27,14 +27,14 @@ public class ProjectBeamMain {
         boolean isStreaming = false;
 
         //tableSpec = [project_id]:[dataset_id].[table_id]a
-        String rawInsTableSpec = "assignment-363220.InstrumentDataStore.raw_instrument_rating";
-        String masterDataset = "gs://instrument-data-bucket/Input/master_dataset.csv";
-        String rawDataset = "gs://instrument-data-bucket/Input/raw_dataset.csv";
-        String tempLocationPath = "gs://instrument-data-bucket/Temp/";
+        String rawInsTableSpec = "symbolic-tape-345822:instrument_rating.raw_instrument_rating";
+        String masterDataset = "gs://instrumentdatabucket/input/master_dataset.csv";
+        String rawDataset = "gs://instrumentdatabucket/input/raw_dataset.csv";
+        String tempLocationPath = "gs://instrumentdatabucket/temp/";
 
         TableReference rawInstrumentTableRef = new TableReference();
-        rawInstrumentTableRef.setProjectId("assignment-363220");
-        rawInstrumentTableRef.setDatasetId("InstrumentDataStore");
+        rawInstrumentTableRef.setProjectId("symbolic-tape-345822");
+        rawInstrumentTableRef.setDatasetId("instrument_rating");
         rawInstrumentTableRef.setTableId("raw_instrument_rating");
 
         // Create the pipeline.
@@ -43,7 +43,6 @@ public class ProjectBeamMain {
         // This is required for BigQuery
         options.setTempLocation(tempLocationPath);
         options.setJobName("csvtobq");
-
 
         Pipeline pipeline = Pipeline.create(options);
         pipeline.apply("Read CSV File", TextIO.read().from(rawDataset))
