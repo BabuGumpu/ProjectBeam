@@ -31,16 +31,34 @@ public class ProjectBeamMain {
         String rawDataset = "gs://instrumentdatabucket/input/raw_dataset.csv";
         String tempLocationPath = "gs://instrumentdatabucket/temp/";
 
-        TableReference rawInstrumentTableRef = new TableReference();
-        rawInstrumentTableRef.setProjectId("symbolic-tape-345822");
-        rawInstrumentTableRef.setDatasetId("instrument_rating");
-        rawInstrumentTableRef.setTableId("raw_instrument_rating");
+        String projectID = "symbolic-tape-345822";
+        String bigQueryInstrDataSet = "instrument_rating";
+        String rawInstrumentRatingTable = "raw_instrument_rating";
+        String masterInstrumentRatingTable = "master_instrument_rating";
+        String stagingInstrumentRatingTable = "staging_instrument_rating";
 
-        //symbolic-tape-345822.instrument_rating.master_instrument_rating
+        logger.info("ProjectBeam Check 01 >> ");
+        //Raw BigQuery Table Reference
+        TableReference rawInstrumentTableRef = new TableReference();
+        rawInstrumentTableRef.setProjectId(projectID);
+        rawInstrumentTableRef.setDatasetId(bigQueryInstrDataSet);
+        rawInstrumentTableRef.setTableId(rawInstrumentRatingTable);
+
+        logger.info("ProjectBeam Check 02 >> ");
+        //Master BigQuery Table Reference
         TableReference masterInstrumentTableRef = new TableReference();
-        masterInstrumentTableRef.setProjectId("symbolic-tape-345822");
-        masterInstrumentTableRef.setDatasetId("instrument_rating");
-        masterInstrumentTableRef.setTableId("master_instrument_rating");
+        masterInstrumentTableRef.setProjectId(projectID);
+        masterInstrumentTableRef.setDatasetId(bigQueryInstrDataSet);
+        masterInstrumentTableRef.setTableId(masterInstrumentRatingTable);
+        logger.info("ProjectBeam Check 03 >> ");
+
+        //Staging BigQuery Table Reference
+        TableReference stagingInstrumentTableRef = new TableReference();
+        stagingInstrumentTableRef.setProjectId(projectID);
+        stagingInstrumentTableRef.setDatasetId(bigQueryInstrDataSet);
+        stagingInstrumentTableRef.setTableId(stagingInstrumentRatingTable);
+        logger.info("ProjectBeam Check 04 >> ");
+
         // Create the pipeline.
         PipelineOptions options = PipelineOptionsFactory.fromArgs(args).withValidation().create();
 
@@ -49,33 +67,53 @@ public class ProjectBeamMain {
         options.setJobName("ProjectBeamJob");
 
         Pipeline pipeline = Pipeline.create(options);
-        pipeline.apply("Read RAW Dataset", TextIO.read().from(rawDataset))
-                .apply("Log messages", ParDo.of(new DoFn<String, String>() {
-                    @ProcessElement
-                    public void processElement(ProcessContext c) {
-                        logger.info("Processing row: " + c.element());
-                        c.output(c.element());
-                    }
-                })).apply("Convert to BigQuery TableRow", ParDo.of(new FormatForBigquery()))
-                .apply("Write into BigQuery",
-                        BigQueryIO.writeTableRows().to(rawInstrumentTableRef).withSchema(FormatForBigquery.getSchema())
-                                .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED)
-                                .withWriteDisposition(isStreaming ? BigQueryIO.Write.WriteDisposition.WRITE_APPEND
-                                        : BigQueryIO.Write.WriteDisposition.WRITE_TRUNCATE));
 
-        pipeline.apply("Read Master Dataset", TextIO.read().from(masterDataset))
-                .apply("Log messages", ParDo.of(new DoFn<String, String>() {
+        //Step 01
+        pipeline
+                .apply("Read Raw Dataset", TextIO.read().from(rawDataset))
+                .apply("Log messages for Raw", ParDo.of(new DoFn<String, String>() {
                     @ProcessElement
                     public void processElement(ProcessContext c) {
                         logger.info("Processing row: " + c.element());
                         c.output(c.element());
                     }
                 })).apply("Convert to BigQuery TableRow", ParDo.of(new FormatForBigquery()))
-                .apply("Write into BigQuery",
-                        BigQueryIO.writeTableRows().to(masterInstrumentTableRef).withSchema(FormatForBigquery.getSchema())
+                .apply("Write into BigQuery Raw Table", BigQueryIO.writeTableRows().to(rawInstrumentTableRef).withSchema(FormatForBigquery.getSchema()).withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED).withWriteDisposition(isStreaming ? BigQueryIO.Write.WriteDisposition.WRITE_APPEND : BigQueryIO.Write.WriteDisposition.WRITE_TRUNCATE));
+
+        //Step 02
+        pipeline
+                .apply("Read Master Dataset", TextIO.read().from(masterDataset))
+                .apply("Log messages for Master", ParDo.of(new DoFn<String, String>() {
+                    @ProcessElement
+                    public void processElement(ProcessContext c) {
+                        logger.info("Processing row: " + c.element());
+                        c.output(c.element());
+                    }
+                }))
+                .apply("Convert to BigQuery TableRow", ParDo.of(new FormatForBigquery()))
+                .apply("Write into Master Table",
+                        BigQueryIO.writeTableRows().to(masterInstrumentTableRef).withSchema(FormatForBigquery.getSchema()).withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED).withWriteDisposition(isStreaming ? BigQueryIO.Write.WriteDisposition.WRITE_APPEND : BigQueryIO.Write.WriteDisposition.WRITE_TRUNCATE));
+
+
+        //Step 03
+        pipeline
+                .apply("Read Rows from Raw Table",
+                        BigQueryIO.readTableRows().fromQuery(String.format("SELECT * FROM `symbolic-tape-345822.instrument_rating.raw_instrument_rating` WHERE ((InstrId is not NULL) AND (ValidFrom is not NULL))", projectID, bigQueryInstrDataSet, rawInstrumentRatingTable)).usingStandardSql())
+                .apply("Write rows into Staging Instrument Table",
+                        BigQueryIO.writeTableRows()
+                                .to(String.format("%s:%s.%s", projectID, bigQueryInstrDataSet, stagingInstrumentRatingTable))
+                                .withSchema(FormatForBigquery.getSchema())
+                                // For CreateDisposition:
+                                // - CREATE_IF_NEEDED (default): creates the table if it doesn't exist, a schema is
+                                // required
+                                // - CREATE_NEVER: raises an error if the table doesn't exist, a schema is not needed
                                 .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED)
-                                .withWriteDisposition(isStreaming ? BigQueryIO.Write.WriteDisposition.WRITE_APPEND
-                                        : BigQueryIO.Write.WriteDisposition.WRITE_TRUNCATE));
+                                // For WriteDisposition:
+                                // - WRITE_EMPTY (default): raises an error if the table is not empty
+                                // - WRITE_APPEND: appends new rows to existing rows
+                                // - WRITE_TRUNCATE: deletes the existing rows before writing
+                                .withWriteDisposition(BigQueryIO.Write.WriteDisposition.WRITE_TRUNCATE));
+
         pipeline.run().waitUntilFinish();
 
         logger.info("ProjectBeamMain End  >> ");
