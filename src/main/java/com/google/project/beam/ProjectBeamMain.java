@@ -36,6 +36,7 @@ public class ProjectBeamMain {
         String rawInstrumentRatingTable = "raw_instrument_rating";
         String masterInstrumentRatingTable = "master_instrument_rating";
         String stagingInstrumentRatingTable = "staging_instrument_rating";
+        String exceptionInstrumentRatingTable = "exception_instrument_rating";
 
         logger.info("ProjectBeam Check 01 >> ");
         //Raw BigQuery Table Reference
@@ -58,6 +59,12 @@ public class ProjectBeamMain {
         stagingInstrumentTableRef.setDatasetId(bigQueryInstrDataSet);
         stagingInstrumentTableRef.setTableId(stagingInstrumentRatingTable);
         logger.info("ProjectBeam Check 04 >> ");
+
+        //Staging BigQuery Table Reference
+        TableReference exceptionInstrumentTableRef = new TableReference();
+        exceptionInstrumentTableRef.setProjectId(projectID);
+        exceptionInstrumentTableRef.setDatasetId(bigQueryInstrDataSet);
+        exceptionInstrumentTableRef.setTableId(stagingInstrumentRatingTable);
 
         // Create the pipeline.
         PipelineOptions options = PipelineOptionsFactory.fromArgs(args).withValidation().create();
@@ -114,6 +121,17 @@ public class ProjectBeamMain {
                                 // - WRITE_TRUNCATE: deletes the existing rows before writing
                                 .withWriteDisposition(BigQueryIO.Write.WriteDisposition.WRITE_TRUNCATE));
 
+        //Step 03
+        pipeline
+                .apply("Read Rows from Raw Table",
+                        BigQueryIO.readTableRows().fromQuery(String.format("SELECT * FROM `%s.%s.%s` WHERE ((InstrId is not NULL) AND (ValidFrom is not NULL))", projectID, bigQueryInstrDataSet, rawInstrumentRatingTable)).usingStandardSql())
+                .apply("Write invalid rows into Exception Instrument Table",
+                        BigQueryIO.writeTableRows()
+                                .to(String.format("%s:%s.%s", projectID, bigQueryInstrDataSet, exceptionInstrumentRatingTable))
+                                .withSchema(FormatForBigquery.getSchema())
+                                .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED)
+                                .withWriteDisposition(BigQueryIO.Write.WriteDisposition.WRITE_TRUNCATE));
+
         pipeline.run().waitUntilFinish();
 
         logger.info("ProjectBeamMain End  >> ");
@@ -150,6 +168,22 @@ public class ProjectBeamMain {
             fields.add(new TableFieldSchema().setName("Code").setType("STRING"));
             fields.add(new TableFieldSchema().setName("ValidFrom").setType("STRING"));
             fields.add(new TableFieldSchema().setName("ValidTo").setType("STRING"));
+            fields.add(new TableFieldSchema().setName("RatingStatus").setType("STRING"));
+            fields.add(new TableFieldSchema().setName("RatingPurposeType").setType("STRING"));
+            return new TableSchema().setFields(fields);
+        }
+
+        /**
+         * Defines the BigQuery schema used for the output.
+         */
+        static TableSchema getStageTableSchema() {
+            List<TableFieldSchema> fields = new ArrayList<>();
+            fields.add(new TableFieldSchema().setName("InstrId").setType("STRING"));
+            fields.add(new TableFieldSchema().setName("RatingAgency").setType("STRING"));
+            fields.add(new TableFieldSchema().setName("RatingGroup").setType("STRING"));
+            fields.add(new TableFieldSchema().setName("Code").setType("STRING"));
+            fields.add(new TableFieldSchema().setName("ValidFrom").setType("DATE"));
+            fields.add(new TableFieldSchema().setName("ValidTo").setType("DATE"));
             fields.add(new TableFieldSchema().setName("RatingStatus").setType("STRING"));
             fields.add(new TableFieldSchema().setName("RatingPurposeType").setType("STRING"));
             return new TableSchema().setFields(fields);
