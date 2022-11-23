@@ -27,7 +27,6 @@ public class ProjectBeamMain {
         boolean isStreaming = false;
 
         //tableSpec = [project_id]:[dataset_id].[table_id]a
-        String rawInsTableSpec = "symbolic-tape-345822:instrument_rating.raw_instrument_rating";
         String masterDataset = "gs://instrumentdatabucket/input/master_dataset.csv";
         String rawDataset = "gs://instrumentdatabucket/input/raw_dataset.csv";
         String tempLocationPath = "gs://instrumentdatabucket/temp/";
@@ -37,15 +36,20 @@ public class ProjectBeamMain {
         rawInstrumentTableRef.setDatasetId("instrument_rating");
         rawInstrumentTableRef.setTableId("raw_instrument_rating");
 
+        //symbolic-tape-345822.instrument_rating.master_instrument_rating
+        TableReference masterInstrumentTableRef = new TableReference();
+        masterInstrumentTableRef.setProjectId("symbolic-tape-345822");
+        masterInstrumentTableRef.setDatasetId("instrument_rating");
+        masterInstrumentTableRef.setTableId("master_instrument_rating");
         // Create the pipeline.
         PipelineOptions options = PipelineOptionsFactory.fromArgs(args).withValidation().create();
 
         // This is required for BigQuery
         options.setTempLocation(tempLocationPath);
-        options.setJobName("csvtobq");
+        options.setJobName("ProjectBeamJob");
 
         Pipeline pipeline = Pipeline.create(options);
-        pipeline.apply("Read CSV File", TextIO.read().from(rawDataset))
+        pipeline.apply("Read RAW Dataset", TextIO.read().from(rawDataset))
                 .apply("Log messages", ParDo.of(new DoFn<String, String>() {
                     @ProcessElement
                     public void processElement(ProcessContext c) {
@@ -58,11 +62,28 @@ public class ProjectBeamMain {
                                 .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED)
                                 .withWriteDisposition(isStreaming ? BigQueryIO.Write.WriteDisposition.WRITE_APPEND
                                         : BigQueryIO.Write.WriteDisposition.WRITE_TRUNCATE));
+
+        pipeline.apply("Read Master Dataset", TextIO.read().from(masterDataset))
+                .apply("Log messages", ParDo.of(new DoFn<String, String>() {
+                    @ProcessElement
+                    public void processElement(ProcessContext c) {
+                        logger.info("Processing row: " + c.element());
+                        c.output(c.element());
+                    }
+                })).apply("Convert to BigQuery TableRow", ParDo.of(new FormatForBigquery()))
+                .apply("Write into BigQuery",
+                        BigQueryIO.writeTableRows().to(masterInstrumentTableRef).withSchema(FormatForBigquery.getSchema())
+                                .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED)
+                                .withWriteDisposition(isStreaming ? BigQueryIO.Write.WriteDisposition.WRITE_APPEND
+                                        : BigQueryIO.Write.WriteDisposition.WRITE_TRUNCATE));
         pipeline.run().waitUntilFinish();
 
         logger.info("ProjectBeamMain End  >> ");
     }
 
+    /**
+     *
+     */
     public static class FormatForBigquery extends DoFn<String, TableRow> {
         private String[] columnNames = HEADERS.split(",");
 
