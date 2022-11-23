@@ -98,7 +98,7 @@ public class ProjectBeamMain {
         //Step 03
         pipeline
                 .apply("Read Rows from Raw Table",
-                        BigQueryIO.readTableRows().fromQuery(String.format("SELECT * FROM `symbolic-tape-345822.instrument_rating.raw_instrument_rating` WHERE ((InstrId is not NULL) AND (ValidFrom is not NULL))", projectID, bigQueryInstrDataSet, rawInstrumentRatingTable)).usingStandardSql())
+                        BigQueryIO.readTableRows().fromQuery(String.format("SELECT * FROM `%s.%s.%s` WHERE ((InstrId is not NULL) AND (ValidFrom is not NULL))", projectID, bigQueryInstrDataSet, rawInstrumentRatingTable)).usingStandardSql())
                 .apply("Write rows into Staging Instrument Table",
                         BigQueryIO.writeTableRows()
                                 .to(String.format("%s:%s.%s", projectID, bigQueryInstrDataSet, stagingInstrumentRatingTable))
